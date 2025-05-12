@@ -1,7 +1,9 @@
-gym[classic_control]
+gymnasium[classic_control, atari, accept-rom-license]
 nevergrad
 numpy
 ray
 seaborn
 tensorboard
 torch
+minigrid
+opencv-python

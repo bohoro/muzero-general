@@ -1,9 +1,9 @@
 import datetime
 import pathlib
 
-import gym
 import numpy
 import torch
+import gymnasium as gym
 
 from .abstract_game import AbstractGame
 
@@ -135,8 +135,7 @@ class Game(AbstractGame):
 
     def __init__(self, seed=None):
         self.env = gym.make("CartPole-v1")
-        if seed is not None:
-            self.env.seed(seed)
+        self._game_seed = seed
 
     def step(self, action):
         """
@@ -148,8 +147,9 @@ class Game(AbstractGame):
         Returns:
             The new observation, the reward and a boolean if the game has ended.
         """
-        observation, reward, done, _ = self.env.step(action)
-        return numpy.array([[observation]]), reward, done
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        done = terminated or truncated
+        return numpy.array([[observation]]), reward, done  # type: ignore
 
     def legal_actions(self):
         """
@@ -171,7 +171,12 @@ class Game(AbstractGame):
         Returns:
             Initial observation of the game.
         """
-        return numpy.array([[self.env.reset()]])
+        seed_to_use = self._game_seed
+        if seed_to_use is not None:
+            self._game_seed = None  # Consume seed
+
+        observation, info = self.env.reset(seed=seed_to_use)
+        return numpy.array([[observation]])  # type: ignore
 
     def close(self):
         """

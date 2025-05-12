@@ -1,16 +1,16 @@
 import datetime
 import pathlib
 
-import gym
 import numpy
 import torch
+import gymnasium as gym
 
 from .abstract_game import AbstractGame
 
 try:
-    import gym_minigrid
+    import minigrid
 except ModuleNotFoundError:
-    raise ModuleNotFoundError('Please run "pip install gym_minigrid"')
+    raise ModuleNotFoundError('Please run "pip install minigrid"')
 
 
 class MuZeroConfig:
@@ -140,9 +140,8 @@ class Game(AbstractGame):
 
     def __init__(self, seed=None):
         self.env = gym.make("MiniGrid-Empty-Random-6x6-v0")
-        self.env = gym_minigrid.wrappers.ImgObsWrapper(self.env)
-        if seed is not None:
-            self.env.seed(seed)
+        self.env = minigrid.wrappers.ImgObsWrapper(self.env)  # type: ignore
+        self._game_seed = seed
 
     def step(self, action):
         """
@@ -154,8 +153,9 @@ class Game(AbstractGame):
         Returns:
             The new observation, the reward and a boolean if the game has ended.
         """
-        observation, reward, done, _ = self.env.step(action)
-        return numpy.array(observation), reward, done
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        done = terminated or truncated
+        return numpy.array(observation), reward, done  # type: ignore
 
     def legal_actions(self):
         """
@@ -177,7 +177,11 @@ class Game(AbstractGame):
         Returns:
             Initial observation of the game.
         """
-        return numpy.array(self.env.reset())
+        seed_to_use = self._game_seed
+        if seed_to_use is not None:
+            self._game_seed = None  # Consume seed
+        observation, info = self.env.reset(seed=seed_to_use)
+        return numpy.array(observation)  # type: ignore
 
     def close(self):
         """

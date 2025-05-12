@@ -1,9 +1,9 @@
 import datetime
 import pathlib
 
-import gym
 import numpy
 import torch
+import gymnasium as gym
 
 from .abstract_game import AbstractGame
 
@@ -132,8 +132,7 @@ class Game(AbstractGame):
     def __init__(self, seed=None):
         self.env = DeterministicLunarLander()
         # self.env = gym.make("LunarLander-v2")
-        if seed is not None:
-            self.env.seed(seed)
+        self._game_seed = seed
 
     def step(self, action):
         """
@@ -145,8 +144,9 @@ class Game(AbstractGame):
         Returns:
             The new observation, the reward and a boolean if the game has ended.
         """
-        observation, reward, done, _ = self.env.step(action)
-        return numpy.array([[observation]]), reward / 3, done
+        observation, reward, terminated, truncated, info = self.env.step(action)  # type: ignore
+        done = terminated or truncated
+        return numpy.array([[observation]]), reward / 3, done  # type: ignore
 
     def legal_actions(self):
         """
@@ -168,7 +168,11 @@ class Game(AbstractGame):
         Returns:
             Initial observation of the game.
         """
-        return numpy.array([[self.env.reset()]])
+        seed_to_use = self._game_seed
+        if seed_to_use is not None:
+            self._game_seed = None  # Consume seed
+        observation, info = self.env.reset(seed=seed_to_use)  # type: ignore
+        return numpy.array([[observation]])  # type: ignore
 
     def close(self):
         """
@@ -239,10 +243,9 @@ try:
     )
 except ModuleNotFoundError:
     raise ModuleNotFoundError(
-        'swig librairy and box2d-py are required to run lunarlander.\n\nPlease install swig with "sudo apt install swig" on Ubuntu or "brew install swig" on mac.\nThen run "pip install box2d-py".\nFor more detailed instructions: https://github.com/openai/gym'
+        'swig and box2d-py (via gymnasium[box2d]) are required to run lunarlander.\n\nPlease install swig (e.g., "sudo apt install swig" on Ubuntu or "brew install swig" on mac).\nThen run "pip install gymnasium[box2d]".\nFor more detailed instructions, refer to the Gymnasium documentation.'
     )
 
-import gym
 from gym import spaces
 from gym.utils import seeding, EzPickle
 
@@ -295,18 +298,16 @@ class DeterministicLunarLander(gym.Env, EzPickle):
 
     def __init__(self):
         EzPickle.__init__(self)
-        self.seed()
         self.viewer = None
 
         self.world = Box2D.b2World()
         self.moon = None
         self.lander = None
         self.particles = []
-
         self.prev_reward = None
 
         # useful range is -1 .. +1, but spikes can be higher
-        self.observation_space = spaces.Box(
+        self.observation_space = gym.spaces.Box(  # type: ignore
             -np.inf, np.inf, shape=(8,), dtype=np.float32
         )
 
@@ -314,12 +315,12 @@ class DeterministicLunarLander(gym.Env, EzPickle):
             # Action is two floats [main engine, left-right engines].
             # Main engine: -1..0 off, 0..+1 throttle from 50% to 100% power. Engine can't work with less than 50% power.
             # Left-right:  -1.0..-0.5 fire left engine, +0.5..+1.0 fire right engine, -0.5..0.5 off
-            self.action_space = spaces.Box(-1, +1, (2,), dtype=np.float32)
+            self.action_space = gym.spaces.Box(-1, +1, (2,), dtype=np.float32)  # type: ignore
         else:
             # Nop, fire left engine, main engine, right engine
-            self.action_space = spaces.Discrete(4)
+            self.action_space = gym.spaces.Discrete(4)  # type: ignore
 
-        self.reset()
+        # seeding will be handled by the first call to reset(seed=...)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -337,7 +338,9 @@ class DeterministicLunarLander(gym.Env, EzPickle):
         self.world.DestroyBody(self.legs[0])
         self.world.DestroyBody(self.legs[1])
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)  # Handles self.np_random
+
         self._destroy()
         self.world.contactListener_keepref = ContactDetector(self)
         self.world.contactListener = self.world.contactListener_keepref
@@ -441,7 +444,8 @@ class DeterministicLunarLander(gym.Env, EzPickle):
 
         self.drawlist = [self.lander] + self.legs
 
-        return self.step(np.array([0, 0]) if self.continuous else 0)[0]
+        obs, _, _, _, _ = self.step(np.array([0, 0]) if self.continuous else 0)
+        return obs, {}
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -586,7 +590,8 @@ class DeterministicLunarLander(gym.Env, EzPickle):
         if not self.lander.awake:
             done = True
             reward = +100
-        return np.array(state, dtype=np.float32), reward, done, {}
+        # Gymnasium expects: obs, reward, terminated, truncated, info
+        return np.array(state, dtype=np.float32), reward, done, False, {}
 
     def render(self, mode="human"):
         from gym.envs.classic_control import rendering

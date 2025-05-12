@@ -1,16 +1,18 @@
 import datetime
 import pathlib
 
-import gym
 import numpy
 import torch
+import gymnasium as gym
 
 from .abstract_game import AbstractGame
 
 try:
     import cv2
 except ModuleNotFoundError:
-    raise ModuleNotFoundError('\nPlease run "pip install gym[atari]"')
+    raise ModuleNotFoundError(
+        '\nPlease run "pip install gymnasium[atari]" and ensure you have Atari ROMs (e.g., run "pip install gymnasium[accept-rom-license]").'
+    )
 
 
 class MuZeroConfig:
@@ -140,8 +142,7 @@ class Game(AbstractGame):
 
     def __init__(self, seed=None):
         self.env = gym.make("Breakout-v4")
-        if seed is not None:
-            self.env.seed(seed)
+        self._game_seed = seed
 
     def step(self, action):
         """
@@ -153,11 +154,12 @@ class Game(AbstractGame):
         Returns:
             The new observation, the reward and a boolean if the game has ended.
         """
-        observation, reward, done, _ = self.env.step(action)
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        done = terminated or truncated
         observation = cv2.resize(observation, (96, 96), interpolation=cv2.INTER_AREA)
         observation = numpy.asarray(observation, dtype="float32") / 255.0
         observation = numpy.moveaxis(observation, -1, 0)
-        return observation, reward, done
+        return observation, reward, done  # type: ignore
 
     def legal_actions(self):
         """
@@ -179,11 +181,15 @@ class Game(AbstractGame):
         Returns:
             Initial observation of the game.
         """
-        observation = self.env.reset()
+        seed_to_use = self._game_seed
+        if seed_to_use is not None:
+            self._game_seed = None  # Consume seed
+        observation, info = self.env.reset(seed=seed_to_use)
+
         observation = cv2.resize(observation, (96, 96), interpolation=cv2.INTER_AREA)
         observation = numpy.asarray(observation, dtype="float32") / 255.0
         observation = numpy.moveaxis(observation, -1, 0)
-        return observation
+        return observation  # type: ignore
 
     def close(self):
         """
