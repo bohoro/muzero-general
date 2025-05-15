@@ -134,7 +134,7 @@ class Game(AbstractGame):
     """
 
     def __init__(self, seed=None):
-        self.env = gym.make("CartPole-v1")
+        self.env = gym.make("CartPole-v1", render_mode="human")
         self._game_seed = seed
 
     def step(self, action):

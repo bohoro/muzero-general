@@ -4,6 +4,9 @@ import pathlib
 import numpy
 import torch
 import gymnasium as gym
+import ale_py
+
+gym.register_envs(ale_py)
 
 from .abstract_game import AbstractGame
 
@@ -141,7 +144,7 @@ class Game(AbstractGame):
     """
 
     def __init__(self, seed=None):
-        self.env = gym.make("Breakout-v4")
+        self.env = gym.make("ALE/Breakout-v5")
         self._game_seed = seed
 
     def step(self, action):
